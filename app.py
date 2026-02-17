@@ -17,12 +17,11 @@ SHEET_NAME = "DB_Preventivi"
 # --- LISTA UTENTI AUTORIZZATI ---
 USERS_LIST = [
     "Seleziona Utente...", 
-    "Mario Rossi",
-    "Luigi Bianchi",
-    "Giulia Verdi",
-    "Francesca Neri",
-    "Admin",
-    "Carla Carolei"
+    "MAX",
+    "LUCIA VENEZIANO",
+    "SAMANTHA CAPORALINI",
+    "STEFANIA PRETE",
+    "CARLA CAROLEI"
 ]
 
 # Colori del Brand
@@ -481,5 +480,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
