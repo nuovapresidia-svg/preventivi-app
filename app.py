@@ -1,6 +1,7 @@
 import streamlit as st
 from fpdf import FPDF
 from datetime import datetime, timedelta
+import pandas as pd
 import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -11,15 +12,15 @@ COMPANY_ADDR = "Via Vittorio Veneto, 180/1 - AREZZO"
 COMPANY_P_IVA = "P.IVA 07141051214"
 COMPANY_WEB = "www.presidiagroup.it"
 LOGO_PATH = "logo.png"
-SHEET_NAME = "DB_Preventivi" # IL NOME ESATTO DEL TUO FOGLIO GOOGLE
+SHEET_NAME = "DB_Preventivi"
 
 # --- LISTA UTENTI AUTORIZZATI ---
 USERS_LIST = [
     "Seleziona Utente...", 
-    "MAX",
-    "Samantha Caporalini",
-    "Lucia Veneziano",
-    "Stefania Prete",
+    "Mario Rossi",
+    "Luigi Bianchi",
+    "Giulia Verdi",
+    "Francesca Neri",
     "Admin",
     "Carla Carolei"
 ]
@@ -40,44 +41,30 @@ PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
 
 # --- CONNESSIONE GOOGLE SHEETS ---
 def get_google_sheet():
-    """Connette a Google Sheets usando i Secrets di Streamlit."""
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    
-    # Recupera le credenziali dai secrets di Streamlit
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    
-    # Apre il foglio
     return client.open(SHEET_NAME).sheet1
 
 def get_next_preventivo_number():
-    """Calcola il prossimo numero leggendo la colonna A di Google Sheets."""
     try:
         sheet = get_google_sheet()
-        # Prende tutti i valori della prima colonna (ID_Preventivo)
         col_values = sheet.col_values(1)
-        
-        # Se c'è solo l'intestazione o è vuoto
         if len(col_values) <= 1:
             return 1
-        
-        # Rimuove l'intestazione e converte in numeri
         ids = []
         for val in col_values[1:]:
             if val.isdigit():
                 ids.append(int(val))
-        
         if not ids:
             return 1
-            
         return max(ids) + 1
     except Exception as e:
-        st.error(f"Errore connessione DB: {e}")
+        # Se fallisce la connessione, fallback su 1 per non bloccare l'app
         return 1
 
 def save_data_gsheet(data):
-    """Salva una nuova riga su Google Sheets."""
     try:
         sheet = get_google_sheet()
         new_row = [
@@ -426,6 +413,17 @@ def main():
 
     st.markdown("---")
     
+    # --- CAMPI SPOSTATI QUI SOPRA IL BOTTONE (FIX) ---
+    c3, c4 = st.columns(2)
+    with c3:
+        pagamento = st.text_input("Modalità di Pagamento", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
+        scadenza_rate = st.text_input("Scadenza Rate", value="Unica Soluzione / Semestrale", key="k_scadenza")
+    with c4:
+        validita = st.number_input("Validità Offerta (giorni)", value=15, step=1, key="k_validita")
+        note = st.text_area("Note aggiuntive", height=68, key="k_note")
+
+    st.markdown("---")
+    
     b_col1, b_col2 = st.columns([1, 1])
     
     with b_col1:
@@ -477,14 +475,6 @@ def main():
             except Exception as e:
                 st.error(f"Errore tecnico: {e}")
 
-    c3, c4 = st.columns(2)
-    with c3:
-        pagamento = st.text_input("Modalità di Pagamento", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
-        scadenza_rate = st.text_input("Scadenza Rate", value="Unica Soluzione / Semestrale", key="k_scadenza")
-    with c4:
-        validita = st.number_input("Validità Offerta (giorni)", value=15, step=1, key="k_validita")
-        note = st.text_area("Note aggiuntive", height=68, key="k_note")
-
 if __name__ == "__main__":
-
     main()
+
