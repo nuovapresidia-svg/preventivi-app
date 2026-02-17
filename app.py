@@ -16,10 +16,10 @@ SHEET_NAME = "DB_Preventivi" # IL NOME ESATTO DEL TUO FOGLIO GOOGLE
 # --- LISTA UTENTI AUTORIZZATI ---
 USERS_LIST = [
     "Seleziona Utente...", 
-    "Mario Rossi",
-    "Luigi Bianchi",
-    "Giulia Verdi",
-    "Francesca Neri",
+    "MAX",
+    "Samantha Caporalini",
+    "Lucia Veneziano",
+    "Stefania Prete",
     "Admin",
     "Carla Carolei"
 ]
@@ -486,4 +486,5 @@ def main():
         note = st.text_area("Note aggiuntive", height=68, key="k_note")
 
 if __name__ == "__main__":
+
     main()
