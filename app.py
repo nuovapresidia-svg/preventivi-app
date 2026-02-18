@@ -273,7 +273,7 @@ def create_pdf(data):
     pdf.cell(30, 4, "BONUS INCLUSO:", ln=False)
     pdf.set_font('Helvetica', '', 9)
     pdf.set_xy(45, by + 4)
-    pdf.multi_cell(150, 4, "In caso di sottoscrizione del servizio entro il periodo di validita del presente Preventivo, sara riconosciuto un bonus di 2 Polizze Fideiussorie Gratuite del valore di 70 euro (per importi cauzionali fino a 19.000,00 euro).")
+    pdf.multi_cell(150, 4, "In caso di sottoscrizione del servizio entro il periodo di validita del presente Preventivo, sara riconosciuto un bonus di 2 Polizze Fideiussorie Gratuite (per importi cauzionali fino a 19.000,00 euro). Offerta NON è valida per chi avesse già usufruito del bonus")
     pdf.set_y(by + 26)
 
     pdf.set_font('Helvetica', 'B', 9)
@@ -507,6 +507,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
