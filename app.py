@@ -33,12 +33,12 @@ COLOR_OPTIONAL_BG = (255, 253, 245)
 
 LISTA_ZONE = [
     "Tutta Italia", "Nord Italia", "Centro Italia", "Sud Italia e Isole",
-    "Lombardia", "Lazio", "Veneto", "Abruzzo", "Basilicata", "Calabria", "Friuli VG", "Liguria", "Marche", "Molise", "Sardegna", "Trentino AA", "Umbria","Valle d Aosta", "Emilia Romagna", "Toscana", 
+    "Lombardia", "Lazio", "Veneto", "Emilia Romagna", "Toscana", 
     "Piemonte", "Campania", "Sicilia", "Puglia", "Estero (UE)", "Estero (Extra UE)"
 ]
 PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
 
-# --- CONNESSIONE GOOGLE SHEETS (MODERNA) ---
+# --- CONNESSIONE GOOGLE SHEETS ---
 def get_google_sheet():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -83,6 +83,19 @@ def save_data_gsheet(data):
             return True
         st.error(f"Errore salvataggio su Google Sheets: {e}")
         return False
+
+def load_data_from_gsheet():
+    """Scarica tutti i dati dal foglio Google e li converte in DataFrame."""
+    try:
+        sheet = get_google_sheet()
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
+        return df
+    except Exception as e:
+        st.error(f"Errore caricamento dati: {e}")
+        return pd.DataFrame()
 
 # --- FUNZIONI DI UTILITÀ ---
 def clean_text(text):
@@ -376,7 +389,7 @@ def create_pdf(data):
 
 # --- 4. INTERFACCIA ---
 def main():
-    st.set_page_config(page_title="Presidia Preventivi", page_icon="📄")
+    st.set_page_config(page_title="Presidia Preventivi", page_icon="📄", layout="wide")
     
     if not check_password():
         return
@@ -391,95 +404,151 @@ def main():
 
     st.markdown("---")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("1. Dati Cliente")
-        cliente = st.text_input("Ragione Sociale", key="k_cliente")
-        email = st.text_input("Email", key="k_email")
+    # --- CREAZIONE SCHEDE (TABS) ---
+    tab1, tab2 = st.tabs(["📝 Genera Preventivo", "🔍 Cerca in Archivio"])
+
+    # === SCHEDA 1: GENERA PREVENTIVO ===
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("1. Dati Cliente")
+            cliente = st.text_input("Ragione Sociale", key="k_cliente")
+            email = st.text_input("Email", key="k_email")
+            
+            st.subheader("2. Proposta Economica")
+            prezzo_1 = st.number_input("Prezzo Annuale (€)", step=50.0, key="k_prezzo1")
+            opz_biennale = st.checkbox("Opzione Biennale?", key="k_opz_biennale")
+            prezzo_2 = 0.0
+            if opz_biennale:
+                prezzo_2 = st.number_input("Prezzo Biennale (€)", step=50.0, key="k_prezzo2")
+
+        with c2:
+            st.subheader("3. Dettagli Servizio")
+            zone = st.multiselect("Zone", options=LISTA_ZONE, default=["Tutta Italia"], key="k_zone")
+            tipologia = st.text_area("Tipologia Gare", height=100, help="Es. Pulizie, Lavori edili, etc.", key="k_tipologia")
+            esiti = st.radio("Includere Servizio Esiti?", ["Sì", "No"], horizontal=True, key="k_esiti")
+            
+            st.markdown("**Opzioni Extra:**")
+            analisibando_qty = st.selectbox("Analisi Bando Pro (Quantità)", options=[0, 1, 5, 10, 15, 20], key="k_analisi")
+
+        st.markdown("---")
         
-        st.subheader("2. Proposta Economica")
-        prezzo_1 = st.number_input("Prezzo Annuale (€)", step=50.0, key="k_prezzo1")
-        opz_biennale = st.checkbox("Opzione Biennale?", key="k_opz_biennale")
-        prezzo_2 = 0.0
-        if opz_biennale:
-            prezzo_2 = st.number_input("Prezzo Biennale (€)", step=50.0, key="k_prezzo2")
+        # Campi sotto
+        c3, c4 = st.columns(2)
+        with c3:
+            pagamento = st.text_input("Modalità di Pagamento", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
+            scadenza_rate = st.text_input("Scadenza Rate", value="Unica Soluzione / Semestrale", key="k_scadenza")
+        with c4:
+            validita = st.number_input("Validità Offerta (giorni)", value=15, step=1, key="k_validita")
+            note = st.text_area("Note aggiuntive", height=68, key="k_note")
 
-    with c2:
-        st.subheader("3. Dettagli Servizio")
-        zone = st.multiselect("Zone", options=LISTA_ZONE, default=["Tutta Italia"], key="k_zone")
-        tipologia = st.text_area("Tipologia Gare", height=100, help="Es. Pulizie, Lavori edili, etc.", key="k_tipologia")
+        st.markdown("---")
         
-        esiti = st.radio("Includere Servizio Esiti?", ["Sì", "No"], horizontal=True, key="k_esiti")
+        b_col1, b_col2 = st.columns([1, 1])
         
-        st.markdown("**Opzioni Extra:**")
-        analisibando_qty = st.selectbox("Analisi Bando Pro (Quantità)", options=[0, 1, 5, 10, 15, 20], key="k_analisi")
+        with b_col1:
+            generate_btn = st.button("📄 Genera Preventivo PDF", type="primary")
 
-    st.markdown("---")
-    
-    # --- CAMPI SPOSTATI QUI SOPRA IL BOTTONE (FIX) ---
-    c3, c4 = st.columns(2)
-    with c3:
-        pagamento = st.text_input("Modalità di Pagamento", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
-        scadenza_rate = st.text_input("Scadenza Rate", value="Unica Soluzione / Semestrale", key="k_scadenza")
-    with c4:
-        validita = st.number_input("Validità Offerta (giorni)", value=15, step=1, key="k_validita")
-        note = st.text_area("Note aggiuntive", height=68, key="k_note")
+        with b_col2:
+            st.button("🔄 Nuova Offerta (Reset)", on_click=clear_form)
 
-    st.markdown("---")
-    
-    b_col1, b_col2 = st.columns([1, 1])
-    
-    with b_col1:
-        generate_btn = st.button("📄 Genera Preventivo PDF", type="primary")
+        if generate_btn:
+            s_esiti = st.session_state["k_esiti"]
+            if not cliente:
+                st.error("Inserire la Ragione Sociale del cliente.")
+            elif prezzo_1 <= 0:
+                st.error("Inserire un prezzo annuale valido.")
+            else:
+                try:
+                    next_id = get_next_preventivo_number()
+                    data_form = {
+                        'preventivo_id': next_id,
+                        'user_name': st.session_state['user_name'],
+                        'cliente': cliente,
+                        'email': email,
+                        'prezzo_1': prezzo_1,
+                        'prezzo_2': prezzo_2,
+                        'zone': zone,
+                        'tipologia': tipologia,
+                        'esiti': s_esiti,
+                        'analisibando_qty': analisibando_qty,
+                        'pagamento': pagamento,
+                        'scadenza_rate': scadenza_rate,
+                        'validita': validita,
+                        'note': note
+                    }
 
-    with b_col2:
-        st.button("🔄 Nuova Offerta (Reset)", on_click=clear_form)
+                    pdf_bytes = create_pdf(data_form)
+                    saved_ok = save_data_gsheet(data_form)
+                    
+                    if saved_ok:
+                        st.success(f"✅ Preventivo N. {next_id} generato e salvato su Cloud!")
+                        file_name = f"Preventivo_{next_id}_{cliente.replace(' ', '_')}.pdf"
+                        st.download_button(
+                            label="⬇️ Scarica PDF",
+                            data=pdf_bytes,
+                            file_name=file_name,
+                            mime='application/pdf'
+                        )
+                except Exception as e:
+                    st.error(f"Errore tecnico: {e}")
 
-    if generate_btn:
-        s_esiti = st.session_state["k_esiti"]
-        if not cliente:
-            st.error("Inserire la Ragione Sociale del cliente.")
-        elif prezzo_1 <= 0:
-            st.error("Inserire un prezzo annuale valido.")
+    # === SCHEDA 2: RICERCA E ARCHIVIO ===
+    with tab2:
+        st.subheader("🔍 Ricerca Storico Preventivi")
+        
+        # Caricamento dati
+        df = load_data_from_gsheet()
+        
+        if not df.empty:
+            # Filtri in alto
+            col_search_1, col_search_2, col_search_3 = st.columns(3)
+            
+            with col_search_1:
+                search_cliente = st.text_input("Cerca per Cliente", placeholder="Es. Rossi Srl...")
+            
+            with col_search_2:
+                # Aggiungiamo 'Tutti' alla lista commerciali per il filtro
+                filter_users = ["Tutti"] + USERS_LIST[1:] 
+                search_user = st.selectbox("Filtra per Commerciale", filter_users)
+                
+            with col_search_3:
+                search_date = st.date_input("Filtra per Data (Opzionale)", value=None)
+
+            # Logica di Filtro
+            df_filtered = df.copy()
+            
+            # 1. Filtro Cliente (case insensitive)
+            if search_cliente:
+                df_filtered = df_filtered[df_filtered['Cliente'].astype(str).str.contains(search_cliente, case=False, na=False)]
+            
+            # 2. Filtro Commerciale
+            if search_user != "Tutti":
+                df_filtered = df_filtered[df_filtered['Venditrice'].astype(str) == search_user]
+            
+            # 3. Filtro Data
+            if search_date:
+                # Convertiamo la colonna Data in stringa e prendiamo i primi 10 caratteri (YYYY-MM-DD)
+                # Assumendo che nel DB la data sia "YYYY-MM-DD HH:MM:SS"
+                try:
+                    df_filtered = df_filtered[df_filtered['Data'].astype(str).str.startswith(str(search_date))]
+                except:
+                    pass
+
+            st.markdown(f"**Risultati trovati:** {len(df_filtered)}")
+            
+            # Mostra tabella
+            st.dataframe(
+                df_filtered, 
+                use_container_width=True,
+                hide_index=True
+            )
         else:
-            try:
-                next_id = get_next_preventivo_number()
-                data_form = {
-                    'preventivo_id': next_id,
-                    'user_name': st.session_state['user_name'],
-                    'cliente': cliente,
-                    'email': email,
-                    'prezzo_1': prezzo_1,
-                    'prezzo_2': prezzo_2,
-                    'zone': zone,
-                    'tipologia': tipologia,
-                    'esiti': s_esiti,
-                    'analisibando_qty': analisibando_qty,
-                    'pagamento': pagamento,
-                    'scadenza_rate': scadenza_rate,
-                    'validita': validita,
-                    'note': note
-                }
-
-                pdf_bytes = create_pdf(data_form)
-                
-                # Salvataggio su Google Sheet
-                saved_ok = save_data_gsheet(data_form)
-                
-                if saved_ok:
-                    st.success(f"✅ Preventivo N. {next_id} generato e salvato su Cloud!")
-                    file_name = f"Preventivo_{next_id}_{cliente.replace(' ', '_')}.pdf"
-                    st.download_button(
-                        label="⬇️ Scarica PDF",
-                        data=pdf_bytes,
-                        file_name=file_name,
-                        mime='application/pdf'
-                    )
-            except Exception as e:
-                st.error(f"Errore tecnico: {e}")
+            st.info("Nessun preventivo trovato nel database o errore di connessione.")
 
 if __name__ == "__main__":
     main()
+
 
 
 
