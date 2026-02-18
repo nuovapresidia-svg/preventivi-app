@@ -3,11 +3,8 @@ from fpdf import FPDF
 from datetime import datetime, timedelta
 import pandas as pd
 import os
-import io
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 # --- CONFIGURAZIONE ---
 COMPANY_NAME = "Presidia Group srl"
@@ -16,7 +13,6 @@ COMPANY_P_IVA = "P.IVA 07141051214"
 COMPANY_WEB = "www.presidiagroup.it"
 LOGO_PATH = "logo.png"
 SHEET_NAME = "DB_Preventivi"
-DRIVE_FOLDER_ID = "151FMGYg9BDRRBCWRL4t0zF9LwDttWoNT" # <--- INCOLLA QUI L'ID DELLA CARTELLA DRIVE
 
 # --- LISTA UTENTI AUTORIZZATI ---
 USERS_LIST = [
@@ -57,30 +53,6 @@ def get_google_sheet():
     client = gspread.authorize(creds)
     return client.open(SHEET_NAME).sheet1
 
-# --- UPLOAD SU GOOGLE DRIVE ---
-def upload_to_drive(pdf_bytes, filename):
-    try:
-        creds = get_credentials()
-        service = build('drive', 'v3', credentials=creds)
-        
-        file_metadata = {
-            'name': filename,
-            'parents': [DRIVE_FOLDER_ID]
-        }
-        
-        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype='application/pdf')
-        
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, webViewLink'
-        ).execute()
-        
-        return file.get('webViewLink')
-    except Exception as e:
-        st.error(f"Errore caricamento su Drive: {e}")
-        return "Errore Upload"
-
 def get_next_preventivo_number():
     try:
         sheet = get_google_sheet()
@@ -91,7 +63,7 @@ def get_next_preventivo_number():
     except:
         return 1
 
-def save_data_gsheet(data, pdf_link):
+def save_data_gsheet(data):
     try:
         sheet = get_google_sheet()
         new_row = [
@@ -101,7 +73,7 @@ def save_data_gsheet(data, pdf_link):
             data['cliente'],
             f"{data['prezzo_1']:.2f}".replace('.', ','),
             data['pagamento'],
-            pdf_link # Nuova colonna con il link
+            "Archivio Locale (PC)" # Nessun link Drive per evitare errori quota
         ]
         sheet.append_row(new_row)
         return True
@@ -407,7 +379,7 @@ def main():
             elif prezzo_1 <= 0: st.error("Inserire Prezzo")
             else:
                 try:
-                    with st.spinner("Generazione PDF e Caricamento su Drive..."):
+                    with st.spinner("Generazione PDF e Salvataggio..."):
                         next_id = get_next_preventivo_number()
                         data_form = {
                             'preventivo_id': next_id,
@@ -429,13 +401,9 @@ def main():
                         pdf_bytes = create_pdf(data_form)
                         file_name = f"Preventivo_{next_id}_{cliente.replace(' ', '_')}.pdf"
                         
-                        # Upload su Drive
-                        link_drive = upload_to_drive(pdf_bytes, file_name)
-                        
-                        # Salvataggio su Sheet con Link
-                        if save_data_gsheet(data_form, link_drive):
-                            st.success(f"✅ Preventivo N. {next_id} Creato! Salvato su Drive e Database.")
-                            st.download_button("⬇️ Scarica PDF Subito", pdf_bytes, file_name, 'application/pdf')
+                        if save_data_gsheet(data_form):
+                            st.success(f"✅ Preventivo N. {next_id} Salvato!")
+                            st.download_button("⬇️ Scarica PDF", pdf_bytes, file_name, 'application/pdf')
                 except Exception as e:
                     st.error(f"Errore: {e}")
 
@@ -459,12 +427,9 @@ def main():
             
             st.write(f"Trovati: {len(df_filt)}")
             
-            # Configurazione Colonne con Link
+            # Mostra la tabella semplice
             st.dataframe(
                 df_filt,
-                column_config={
-                    "Link PDF": st.column_config.LinkColumn("Scarica PDF", display_text="Apri File")
-                },
                 use_container_width=True,
                 hide_index=True
             )
@@ -473,6 +438,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
