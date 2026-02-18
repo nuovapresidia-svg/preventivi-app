@@ -38,18 +38,11 @@ LISTA_ZONE = [
 ]
 PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
 
-# --- GESTIONE CREDENZIALI GOOGLE ---
-def get_credentials():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    return Credentials.from_service_account_info(creds_dict, scopes=scopes)
-
 # --- CONNESSIONE GOOGLE SHEETS ---
 def get_google_sheet():
-    creds = get_credentials()
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open(SHEET_NAME).sheet1
 
@@ -63,9 +56,13 @@ def get_next_preventivo_number():
     except:
         return 1
 
+# SALVATAGGIO COMPLETO DI TUTTI I CAMPI
 def save_data_gsheet(data):
     try:
         sheet = get_google_sheet()
+        # Convertiamo la lista zone in stringa per salvarla in una cella sola
+        zone_str = ", ".join(data['zone'])
+        
         new_row = [
             data['preventivo_id'],
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -73,7 +70,16 @@ def save_data_gsheet(data):
             data['cliente'],
             f"{data['prezzo_1']:.2f}".replace('.', ','),
             data['pagamento'],
-            "Archivio Locale (PC)" # Nessun link Drive per evitare errori quota
+            # NUOVI CAMPI PER RISTAMPA
+            data['email'],
+            f"{data['prezzo_2']:.2f}".replace('.', ','),
+            zone_str,
+            data['tipologia'],
+            data['esiti'],
+            data['analisibando_qty'],
+            data['scadenza_rate'],
+            data['validita'],
+            data['note']
         ]
         sheet.append_row(new_row)
         return True
@@ -137,7 +143,7 @@ def check_password():
         return False
     return True
 
-# --- 2. PDF ---
+# --- 2. PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_PATH): self.image(LOGO_PATH, 10, 8, 45) 
@@ -277,7 +283,7 @@ def create_pdf(data):
     pdf.cell(30, 6, "Scadenza Rate:", ln=False)
     pdf.set_font('Helvetica', '', 9)
     pdf.cell(0, 6, clean_text(data['scadenza_rate']), ln=True)
-    scad = (datetime.now() + timedelta(days=data['validita'])).strftime('%d/%m/%Y')
+    scad = (datetime.now() + timedelta(days=int(data['validita']))).strftime('%d/%m/%Y')
     pdf.set_font('Helvetica', 'I', 9)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 6, f"Offerta valida fino al: {scad}", ln=True)
@@ -337,8 +343,9 @@ def main():
         st.write(f"Commerciale: **{st.session_state['user_name']}**")
     st.markdown("---")
 
-    tab1, tab2 = st.tabs(["📝 Genera Preventivo", "🔍 Cerca in Archivio"])
+    tab1, tab2 = st.tabs(["📝 Genera Preventivo", "🔍 Cerca & Ristampa"])
 
+    # === SCHEDA GENERA ===
     with tab1:
         c1, c2 = st.columns(2)
         with c1:
@@ -379,7 +386,7 @@ def main():
             elif prezzo_1 <= 0: st.error("Inserire Prezzo")
             else:
                 try:
-                    with st.spinner("Generazione PDF e Salvataggio..."):
+                    with st.spinner("Salvataggio..."):
                         next_id = get_next_preventivo_number()
                         data_form = {
                             'preventivo_id': next_id,
@@ -407,37 +414,88 @@ def main():
                 except Exception as e:
                     st.error(f"Errore: {e}")
 
+    # === SCHEDA RICERCA E RISTAMPA ===
     with tab2:
-        st.subheader("🔍 Archivio Preventivi")
+        st.subheader("🔍 Archivio e Ristampa")
         df = load_data_from_gsheet()
+        
         if not df.empty:
-            col1, col2, col3 = st.columns(3)
-            with col1: search_cli = st.text_input("Cerca Cliente")
-            with col2: 
-                filtro_user = ["Tutti"] + USERS_LIST[1:]
-                search_usr = st.selectbox("Filtra Commerciale", filtro_user)
-            with col3: search_date = st.date_input("Data", value=None)
+            # Filtri
+            c_fil1, c_fil2 = st.columns(2)
+            with c_fil1: 
+                search_text = st.text_input("Cerca (Cliente o ID)", placeholder="Es. Rossi...")
+            with c_fil2:
+                user_filter = st.selectbox("Filtra Commerciale", ["Tutti"] + USERS_LIST[1:])
 
+            # Applicazione Filtri
             df_filt = df.copy()
-            if search_cli: df_filt = df_filt[df_filt['Cliente'].astype(str).str.contains(search_cli, case=False, na=False)]
-            if search_usr != "Tutti": df_filt = df_filt[df_filt['Venditrice'].astype(str) == search_usr]
-            if search_date: 
-                try: df_filt = df_filt[df_filt['Data'].astype(str).str.startswith(str(search_date))]
-                except: pass
+            if search_text:
+                mask = df_filt.astype(str).apply(lambda x: x.str.contains(search_text, case=False)).any(axis=1)
+                df_filt = df_filt[mask]
             
-            st.write(f"Trovati: {len(df_filt)}")
-            
-            # Mostra la tabella semplice
-            st.dataframe(
-                df_filt,
-                use_container_width=True,
-                hide_index=True
-            )
+            if user_filter != "Tutti":
+                df_filt = df_filt[df_filt['Venditrice'].astype(str) == user_filter]
+
+            # Selezione Preventivo per Dettaglio
+            if not df_filt.empty:
+                st.write(f"Trovati: {len(df_filt)}")
+                
+                # Creiamo una lista per la selectbox
+                options = df_filt.apply(lambda x: f"ID: {x['ID_Preventivo']} - {x['Cliente']} ({x['Data']})", axis=1)
+                selected_option = st.selectbox("Seleziona preventivo da visualizzare:", options)
+                
+                # Estraiamo l'ID selezionato
+                selected_id = int(selected_option.split(" - ")[0].replace("ID: ", ""))
+                
+                # Recuperiamo la riga completa
+                row = df[df['ID_Preventivo'] == selected_id].iloc[0]
+                
+                st.markdown("---")
+                # Mostra Dettagli in JSON espandibile
+                with st.expander("📋 Vedi Dettagli Completi", expanded=True):
+                    st.write(row.to_dict())
+
+                # Tasto Ristampa
+                if st.button("🖨️ RIGENERA PDF"):
+                    try:
+                        # Ricostruiamo il dizionario dati per il PDF
+                        # Dobbiamo convertire i prezzi da stringa (es "1.000,00") a float
+                        p1 = float(str(row['Prezzo Tot']).replace('.', '').replace(',', '.'))
+                        p2 = float(str(row['Prezzo Biennale']).replace('.', '').replace(',', '.')) if row['Prezzo Biennale'] else 0.0
+                        
+                        data_reprint = {
+                            'preventivo_id': row['ID_Preventivo'],
+                            'user_name': row['Venditrice'],
+                            'cliente': row['Cliente'],
+                            'email': row['Email'],
+                            'prezzo_1': p1,
+                            'prezzo_2': p2,
+                            'zone': str(row['Zone']).split(", "), # Riconvertiamo stringa in lista
+                            'tipologia': row['Tipologia'],
+                            'esiti': row['Esiti'],
+                            'analisibando_qty': int(row['Analisi Qty']),
+                            'pagamento': row['Pagamento'],
+                            'scadenza_rate': row['Scadenza Rate'],
+                            'validita': int(row['Validita']),
+                            'note': row['Note']
+                        }
+                        
+                        pdf_bytes_re = create_pdf(data_reprint)
+                        file_name_re = f"Ristampa_Prev_{row['ID_Preventivo']}_{row['Cliente']}.pdf"
+                        
+                        st.download_button("⬇️ Scarica PDF Rigenerato", pdf_bytes_re, file_name_re, 'application/pdf')
+                        
+                    except Exception as e:
+                        st.error(f"Errore rigenerazione: {e}. Verifica che i dati nel foglio siano corretti.")
+
+            else:
+                st.warning("Nessun preventivo corrisponde alla ricerca.")
         else:
-            st.info("Nessun dato trovato.")
+            st.info("Database vuoto.")
 
 if __name__ == "__main__":
     main()
+
 
 
 
