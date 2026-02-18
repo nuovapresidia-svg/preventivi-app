@@ -33,7 +33,7 @@ COLOR_OPTIONAL_BG = (255, 253, 245)
 
 LISTA_ZONE = [
     "Tutta Italia", "Nord Italia", "Centro Italia", "Sud Italia e Isole",
-    "Lombardia", "Lazio", "Veneto", "Emilia Romagna", "Toscana", 
+    "Lombardia", "Lazio", "Abruzzo", "Basilicata", "Calabria", "Emilia Romagna", "Liguria", "Marche", "Molise", "Sardegna", "Trentino AA", "Umbria", "Valle d Aosta", "Friuli VG", "Veneto", "Emilia Romagna", "Toscana", 
     "Piemonte", "Campania", "Sicilia", "Puglia", "Estero (UE)", "Estero (Extra UE)"
 ]
 PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
@@ -495,6 +495,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
