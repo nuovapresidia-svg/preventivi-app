@@ -19,6 +19,7 @@ USERS_LIST = [
     "Seleziona Utente...", 
     "MAX",
     "LUCIA VENEZIANO",
+    "FARIDA VANNI",
     "SAMANTHA CAPORALINI",
     "STEFANIA PRETE",
     "CARLA CAROLEI"
@@ -506,6 +507,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
