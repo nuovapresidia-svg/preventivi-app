@@ -37,7 +37,7 @@ LISTA_ZONE = [
     "Lombardia", "Lazio", "Abruzzo", "Basilicata", "Calabria", "Emilia Romagna", "Liguria", "Marche", "Molise", "Sardegna", "Trentino AA", "Umbria", "Valle d Aosta", "Friuli VG", "Veneto", "Emilia Romagna", "Toscana", 
     "Piemonte", "Campania", "Sicilia", "Puglia", "Estero (UE)", "Estero (Extra UE)"
 ]
-PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
+PREZZI_ANALISI = {0: 0.00, 1: 10.00, 5: 47.50, 10: 90.00, 15: 127.50, 20: 160.00}
 
 # --- CONNESSIONE GOOGLE SHEETS ---
 def get_google_sheet():
@@ -507,6 +507,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
