@@ -15,7 +15,6 @@ LOGO_PATH = "logo.png"
 SHEET_NAME = "DB_Preventivi"
 
 # --- LISTA UTENTI AUTORIZZATI ---
-# Questi sono i nomi validi per l'accesso.
 USERS_LIST = [
     "MAX",
     "LUCIA VENEZIANO",
@@ -32,7 +31,7 @@ COLOR_LIGHT_GRAY = (248, 248, 248)
 COLOR_BONUS_BG = (255, 250, 225)   
 COLOR_OPTIONAL_BG = (255, 253, 245) 
 
-# --- LISTA ZONE AGGIORNATA E COMPLETA ---
+# --- LISTA ZONE ---
 LISTA_ZONE = [
     "Tutta Italia", "Nord Italia", "Centro Italia", "Sud Italia e Isole",
     "Abruzzo", "Basilicata", "Calabria", "Campania", "Emilia Romagna", 
@@ -66,7 +65,6 @@ def get_next_preventivo_number():
 def save_data_gsheet(data):
     try:
         sheet = get_google_sheet()
-        # Convertiamo la lista zone in stringa per salvarla in una cella sola
         zone_str = ", ".join(data['zone'])
         
         new_row = [
@@ -109,6 +107,13 @@ def clean_text(text):
     for k, v in replacements.items(): text = text.replace(k, v)
     return text.encode('latin-1', 'replace').decode('latin-1')
 
+def safe_int(value, default=0):
+    try:
+        if value == "" or value is None: return default
+        return int(float(str(value).replace(',', '.')))
+    except:
+        return default
+
 def clear_form():
     st.session_state["k_cliente"] = ""
     st.session_state["k_email"] = ""
@@ -124,7 +129,7 @@ def clear_form():
     st.session_state["k_validita"] = 15
     st.session_state["k_note"] = ""
 
-# --- 1. AUTENTICAZIONE (PRIVACY PROTETTA) ---
+# --- 1. AUTENTICAZIONE ---
 def check_password():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
@@ -134,7 +139,6 @@ def check_password():
         st.title("🔒 Accesso Area Preventivi")
         col1, col2 = st.columns([2,1])
         with col1:
-            # Casella di testo libera per nascondere la lista nomi
             user_input = st.text_input("Nome Utente (es. MAX, LUCIA...)")
             pwd = st.text_input("Password", type="password")
             
@@ -291,7 +295,12 @@ def create_pdf(data):
     pdf.cell(30, 6, "Scadenza Rate:", ln=False)
     pdf.set_font('Helvetica', '', 9)
     pdf.cell(0, 6, clean_text(data['scadenza_rate']), ln=True)
-    scad = (datetime.now() + timedelta(days=int(data['validita']))).strftime('%d/%m/%Y')
+    
+    try:
+        scad = (datetime.now() + timedelta(days=int(data['validita']))).strftime('%d/%m/%Y')
+    except:
+        scad = (datetime.now() + timedelta(days=15)).strftime('%d/%m/%Y')
+        
     pdf.set_font('Helvetica', 'I', 9)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 6, f"Offerta valida fino al: {scad}", ln=True)
@@ -358,24 +367,24 @@ def main():
         c1, c2 = st.columns(2)
         with c1:
             st.subheader("1. Dati Cliente")
-            cliente = st.text_input("Ragione Sociale", key="k_cliente")
+            cliente = st.text_input("Ragione Sociale *", key="k_cliente")
             email = st.text_input("Email", key="k_email")
             st.subheader("2. Proposta Economica")
-            prezzo_1 = st.number_input("Prezzo Annuale (€)", step=50.0, key="k_prezzo1")
+            prezzo_1 = st.number_input("Prezzo Annuale (€) *", step=50.0, key="k_prezzo1")
             opz_biennale = st.checkbox("Opzione Biennale?", key="k_opz_biennale")
             prezzo_2 = 0.0
             if opz_biennale: prezzo_2 = st.number_input("Prezzo Biennale (€)", step=50.0, key="k_prezzo2")
         with c2:
             st.subheader("3. Dettagli Servizio")
-            zone = st.multiselect("Zone", options=LISTA_ZONE, default=["Tutta Italia"], key="k_zone")
-            tipologia = st.text_area("Tipologia Gare", height=100, key="k_tipologia")
+            zone = st.multiselect("Zone *", options=LISTA_ZONE, default=["Tutta Italia"], key="k_zone")
+            tipologia = st.text_area("Tipologia Gare *", height=100, key="k_tipologia")
             esiti = st.radio("Includere Servizio Esiti?", ["Sì", "No"], horizontal=True, key="k_esiti")
             st.markdown("**Opzioni Extra:**")
             analisibando_qty = st.selectbox("Analisi Bando Pro (Quantità)", options=[0, 1, 5, 10, 15, 20], key="k_analisi")
         st.markdown("---")
         c3, c4 = st.columns(2)
         with c3:
-            pagamento = st.text_input("Modalità di Pagamento", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
+            pagamento = st.text_input("Modalità di Pagamento *", value="Bonifico Bancario 30gg d.f.", key="k_pagamento")
             scadenza_rate = st.text_input("Scadenza Rate", value="Unica Soluzione / Semestrale", key="k_scadenza")
         with c4:
             validita = st.number_input("Validità Offerta (giorni)", value=15, step=1, key="k_validita")
@@ -390,8 +399,17 @@ def main():
 
         if gen_btn:
             s_esiti = st.session_state["k_esiti"]
-            if not cliente: st.error("Inserire Cliente")
-            elif prezzo_1 <= 0: st.error("Inserire Prezzo")
+            
+            # --- VALIDAZIONE CAMPI OBBLIGATORI ---
+            errori = []
+            if not cliente: errori.append("Ragione Sociale")
+            if not tipologia: errori.append("Tipologia Gare")
+            if not zone: errori.append("Zone")
+            if prezzo_1 <= 0: errori.append("Prezzo Annuale")
+            if not pagamento: errori.append("Modalità di Pagamento")
+
+            if errori:
+                st.error(f"⚠️ Mancano i seguenti campi obbligatori: {', '.join(errori)}")
             else:
                 try:
                     with st.spinner("Salvataggio..."):
@@ -428,41 +446,32 @@ def main():
         df = load_data_from_gsheet()
         
         if not df.empty:
-            # Convertiamo la colonna Data
             df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
 
-            # Filtri in 4 colonne
             c_fil1, c_fil2, c_fil3, c_fil4 = st.columns([2, 2, 1, 1])
             with c_fil1: 
                 search_text = st.text_input("Cerca (Cliente o ID)", placeholder="Es. Rossi...")
             with c_fil2:
-                # LISTA FILTRI (Aggiungiamo "Tutti")
-                filtro_list = ["Tutti"] + USERS_LIST
-                user_filter = st.selectbox("Filtra Commerciale", filtro_list)
+                filter_options = ["Tutti"] + USERS_LIST
+                user_filter = st.selectbox("Filtra Commerciale", filter_options)
             with c_fil3:
                 date_from = st.date_input("Da:", value=None)
             with c_fil4:
                 date_to = st.date_input("A:", value=None)
 
-            # Applicazione Filtri
             df_filt = df.copy()
-            
-            # Filtro Testo
             if search_text:
                 mask = df_filt.astype(str).apply(lambda x: x.str.contains(search_text, case=False)).any(axis=1)
                 df_filt = df_filt[mask]
             
-            # Filtro Utente
             if user_filter != "Tutti":
                 df_filt = df_filt[df_filt['Venditrice'].astype(str) == user_filter]
 
-            # Filtro Data (Range)
             if date_from:
                 df_filt = df_filt[df_filt['Data_dt'].dt.date >= date_from]
             if date_to:
                 df_filt = df_filt[df_filt['Data_dt'].dt.date <= date_to]
 
-            # Selezione Preventivo per Dettaglio
             if not df_filt.empty:
                 st.write(f"Trovati: {len(df_filt)}")
                 
@@ -470,8 +479,6 @@ def main():
                 selected_option = st.selectbox("Seleziona preventivo da visualizzare:", options)
                 
                 selected_id = int(selected_option.split(" - ")[0].replace("ID: ", ""))
-                
-                # Recuperiamo la riga completa
                 row = df[df['ID_Preventivo'] == selected_id].iloc[0]
                 
                 st.markdown("---")
@@ -481,33 +488,33 @@ def main():
 
                 if st.button("🖨️ RIGENERA PDF"):
                     try:
-                        p1 = float(str(row['Prezzo Tot']).replace('.', '').replace(',', '.'))
-                        p2 = float(str(row['Prezzo Biennale']).replace('.', '').replace(',', '.')) if row['Prezzo Biennale'] else 0.0
+                        p1 = float(str(row.get('Prezzo Tot', 0)).replace('.', '').replace(',', '.')) if str(row.get('Prezzo Tot')).strip() else 0.0
+                        p2_val = row.get('Prezzo Biennale', '')
+                        p2 = float(str(p2_val).replace('.', '').replace(',', '.')) if str(p2_val).strip() else 0.0
                         
                         data_reprint = {
                             'preventivo_id': row['ID_Preventivo'],
                             'user_name': row['Venditrice'],
                             'cliente': row['Cliente'],
-                            'email': row['Email'],
+                            'email': row.get('Email', ''),
                             'prezzo_1': p1,
                             'prezzo_2': p2,
-                            'zone': str(row['Zone']).split(", "),
-                            'tipologia': row['Tipologia'],
-                            'esiti': row['Esiti'],
-                            'analisibando_qty': int(row['Analisi Qty']),
-                            'pagamento': row['Pagamento'],
-                            'scadenza_rate': row['Scadenza Rate'],
-                            'validita': int(row['Validita']),
-                            'note': row['Note']
+                            'zone': str(row.get('Zone', '')).split(", "),
+                            'tipologia': row.get('Tipologia', ''),
+                            'esiti': row.get('Esiti', 'No'),
+                            'analisibando_qty': safe_int(row.get('Analisi Qty')),
+                            'pagamento': row.get('Pagamento', ''),
+                            'scadenza_rate': row.get('Scadenza Rate', ''),
+                            'validita': safe_int(row.get('Validita'), 15),
+                            'note': row.get('Note', '')
                         }
                         
                         pdf_bytes_re = create_pdf(data_reprint)
                         file_name_re = f"Ristampa_Prev_{row['ID_Preventivo']}_{row['Cliente']}.pdf"
-                        
                         st.download_button("⬇️ Scarica PDF Rigenerato", pdf_bytes_re, file_name_re, 'application/pdf')
                         
                     except Exception as e:
-                        st.error(f"Errore rigenerazione: {e}. Verifica che i dati nel foglio siano corretti.")
+                        st.error(f"Errore rigenerazione: {e}. Controllare i dati nel DB.")
 
             else:
                 st.warning("Nessun preventivo corrisponde alla ricerca.")
@@ -516,6 +523,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
