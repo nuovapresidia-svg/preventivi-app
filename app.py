@@ -15,14 +15,14 @@ LOGO_PATH = "logo.png"
 SHEET_NAME = "DB_Preventivi"
 
 # --- LISTA UTENTI AUTORIZZATI ---
+# Questi sono i nomi validi per l'accesso.
 USERS_LIST = [
-    "Seleziona Utente...", 
     "MAX",
     "LUCIA VENEZIANO",
-    "FARIDA VANNI",
     "SAMANTHA CAPORALINI",
     "STEFANIA PRETE",
-    "CARLA CAROLEI"
+    "CARLA CAROLEI",
+    "ADMIN"
 ]
 
 # Colori del Brand
@@ -32,12 +32,17 @@ COLOR_LIGHT_GRAY = (248, 248, 248)
 COLOR_BONUS_BG = (255, 250, 225)   
 COLOR_OPTIONAL_BG = (255, 253, 245) 
 
+# --- LISTA ZONE AGGIORNATA E COMPLETA ---
 LISTA_ZONE = [
     "Tutta Italia", "Nord Italia", "Centro Italia", "Sud Italia e Isole",
-    "Lombardia", "Lazio", "Abruzzo", "Basilicata", "Calabria", "Emilia Romagna", "Liguria", "Marche", "Molise", "Sardegna", "Trentino AA", "Umbria", "Valle d Aosta", "Friuli VG", "Veneto", "Emilia Romagna", "Toscana", 
-    "Piemonte", "Campania", "Sicilia", "Puglia", "Estero (UE)", "Estero (Extra UE)"
+    "Abruzzo", "Basilicata", "Calabria", "Campania", "Emilia Romagna", 
+    "Friuli VG", "Lazio", "Liguria", "Lombardia", "Marche", "Molise", 
+    "Piemonte", "Puglia", "Sardegna", "Sicilia", "Toscana", "Trentino AA", 
+    "Umbria", "Valle d Aosta", "Veneto",
+    "Estero (UE)", "Estero (Extra UE)"
 ]
-PREZZI_ANALISI = {0: 0.00, 1: 10.00, 5: 47.50, 10: 90.00, 15: 127.50, 20: 160.00}
+
+PREZZI_ANALISI = {0: 0.00, 1: 5.00, 5: 22.50, 10: 40.00, 15: 52.50, 20: 60.00}
 
 # --- CONNESSIONE GOOGLE SHEETS ---
 def get_google_sheet():
@@ -71,7 +76,6 @@ def save_data_gsheet(data):
             data['cliente'],
             f"{data['prezzo_1']:.2f}".replace('.', ','),
             data['pagamento'],
-            # NUOVI CAMPI PER RISTAMPA
             data['email'],
             f"{data['prezzo_2']:.2f}".replace('.', ','),
             zone_str,
@@ -120,7 +124,7 @@ def clear_form():
     st.session_state["k_validita"] = 15
     st.session_state["k_note"] = ""
 
-# --- 1. AUTENTICAZIONE ---
+# --- 1. AUTENTICAZIONE (PRIVACY PROTETTA) ---
 def check_password():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
@@ -130,17 +134,20 @@ def check_password():
         st.title("🔒 Accesso Area Preventivi")
         col1, col2 = st.columns([2,1])
         with col1:
-            user = st.selectbox("Seleziona Commerciale", USERS_LIST)
+            # Casella di testo libera per nascondere la lista nomi
+            user_input = st.text_input("Nome Utente (es. MAX, LUCIA...)")
             pwd = st.text_input("Password", type="password")
+            
             if st.button("Accedi"):
-                if pwd == "Presidia2024" and user != "Seleziona Utente...":
+                user_clean = user_input.strip().upper()
+                if pwd == "Presidia2024" and user_clean in USERS_LIST:
                     st.session_state["logged_in"] = True
-                    st.session_state["user_name"] = user.upper()
+                    st.session_state["user_name"] = user_clean
                     st.rerun()
-                elif user == "Seleziona Utente...":
-                    st.warning("Seleziona un utente.")
+                elif user_clean not in USERS_LIST and user_clean != "":
+                    st.error("Utente non autorizzato.")
                 else:
-                    st.error("Password errata.")
+                    st.error("Credenziali errate.")
         return False
     return True
 
@@ -273,7 +280,7 @@ def create_pdf(data):
     pdf.cell(30, 4, "BONUS INCLUSO:", ln=False)
     pdf.set_font('Helvetica', '', 9)
     pdf.set_xy(45, by + 4)
-    pdf.multi_cell(150, 4, "In caso di sottoscrizione del servizio entro il periodo di validita del presente Preventivo, sara riconosciuto un bonus di 2 Polizze Fideiussorie Gratuite (per importi cauzionali fino a 19.000,00 euro). Offerta NON è valida per chi avesse già usufruito del bonus")
+    pdf.multi_cell(150, 4, "In caso di sottoscrizione del servizio entro il periodo di validita del presente Preventivo, sara riconosciuto un bonus di 2 Polizze Fideiussorie Gratuite del valore di 70 euro (per importi cauzionali fino a 19.000,00 euro).")
     pdf.set_y(by + 26)
 
     pdf.set_font('Helvetica', 'B', 9)
@@ -429,7 +436,9 @@ def main():
             with c_fil1: 
                 search_text = st.text_input("Cerca (Cliente o ID)", placeholder="Es. Rossi...")
             with c_fil2:
-                user_filter = st.selectbox("Filtra Commerciale", ["Tutti"] + USERS_LIST[1:])
+                # LISTA FILTRI (Aggiungiamo "Tutti")
+                filtro_list = ["Tutti"] + USERS_LIST
+                user_filter = st.selectbox("Filtra Commerciale", filtro_list)
             with c_fil3:
                 date_from = st.date_input("Da:", value=None)
             with c_fil4:
@@ -507,6 +516,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
